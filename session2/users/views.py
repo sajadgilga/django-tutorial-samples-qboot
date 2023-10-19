@@ -1,12 +1,14 @@
 import json
 
-from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from users.models import Book
+from users.serializers import BookSerializer
 
 
 class BookEncoder(json.JSONEncoder):
@@ -16,8 +18,12 @@ class BookEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class BookCrudView(View):
+class BookCrudView(APIView):
+    """
+    CRUD actions for Book model (text, name, author, owner)
+    """
+    permission_classes = [IsAuthenticated]
+
     def get_book_by_id(self, pk):
         try:
             book = Book.objects.get(pk=pk)
@@ -57,35 +63,35 @@ class BookCrudView(View):
         if book_id:
             book = self.get_book_by_id(book_id)
             if book:
-                return JsonResponse(book, safe=False, encoder=BookEncoder)
-            return JsonResponse({"error": "Book not found"}, status=404)
+                return Response(BookSerializer(book).data)
+            return Response({"error": "Book not found"}, status=404)
 
-        books = list(Book.objects.all())
-        return JsonResponse(books, safe=False, encoder=BookEncoder)
+        books = Book.objects.all()
+        return Response(BookSerializer(books, many=True).data)
 
     def post(self, request, *args, **kwargs):
         if not self.check_authentication(request):
-            return JsonResponse({"error": "Authentication required"}, status=401)
+            return Response({"error": "Authentication required"}, status=401)
 
         data = json.loads(request.body)
         errors = self.validate_book(data)
         if errors:
-            return JsonResponse(errors, safe=False, status=400)
+            return Response(errors, safe=False, status=400)
 
         book = Book.objects.create(name=data.get('name'), text=data.get('text'), author=data.get('author'),
                                    owner=request.user)
-        return JsonResponse({"message": "Book created", "data": book}, encoder=BookEncoder)
+        return Response({"message": "Book created", "data": book}, encoder=BookEncoder)
 
     def run_checks_and_get_object(self, request, pk):
         if not self.check_authentication(request):
-            return JsonResponse({"error": "Authentication required"}, status=401)
+            return Response({"error": "Authentication required"}, status=401)
 
         book = self.get_book_by_id(pk)
         if not book:
-            return JsonResponse({"error": "Book not found"}, status=404)
+            return Response({"error": "Book not found"}, status=404)
 
         if not self.is_owner(book, request.user):
-            return JsonResponse({"error": "Not authorized for this action"}, status=403)
+            return Response({"error": "Not authorized for this action"}, status=403)
         return book
 
     def put(self, request, pk, *args, **kwargs):
@@ -97,13 +103,13 @@ class BookCrudView(View):
         data = json.loads(request.body)
         errors = self.validate_book(data)
         if errors:
-            return JsonResponse(errors, status=400)
+            return Response(errors, status=400)
 
         book.text = data.get('text')
         book.name = data.get('name')
         book.author = data.get('author')
         book.save()
-        return JsonResponse({"message": "Book updated"})
+        return Response({"message": "Book updated"})
 
     def patch(self, request, pk, *args, **kwargs):
         result = self.run_checks_and_get_object(request, pk)
@@ -120,7 +126,7 @@ class BookCrudView(View):
         if 'author' in data:
             book.author = data.get('author')
         book.save()
-        return JsonResponse({"message": "Book partially updated"})
+        return Response({"message": "Book partially updated"})
 
     def delete(self, request, pk, *args, **kwargs):
         result = self.run_checks_and_get_object(request, pk)
@@ -129,4 +135,4 @@ class BookCrudView(View):
         book = result
 
         book.delete()
-        return JsonResponse({"message": "Book deleted"}, status=201)
+        return Response({"message": "Book deleted"}, status=201)
