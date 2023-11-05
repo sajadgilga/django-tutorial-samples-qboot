@@ -9,3 +9,7 @@ django-cors-headers==4.3.0
 djangorestframework-simplejwt==5.3.0
 coverage==7.3.2
 model-bakery==1.16.0
+celery==5.3.4
+django-celery-results==2.5.1
+requests~=2.31.0
+gevent~=23.9.1
